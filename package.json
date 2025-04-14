@@ -28,6 +28,7 @@
         "typescript": "^4.9.4"
     },
     "dependencies": {
+        "@treecg/versionawareldesinldp": "^0.3.0",
         "@types/n3": "^1.16.4",
         "@types/redis": "^4.0.11",
         "@types/ws": "^8.5.10",

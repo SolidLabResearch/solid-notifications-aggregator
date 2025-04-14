@@ -1,11 +1,11 @@
-## Solid Stream Notifications Aggregator
+## Solid Notifications Aggregator
 
-The Solid Stream Notifications Aggregator is a service which works on top of one or more Solid Pods to provide an immediate aggregator for the clients to consume the latest streaming data stored in the Solid Pods via the Solid Notifications Protocol's [WebHookChannel2023](https://solid.github.io/notifications/webhook-channel-2023).  
+The Solid Notifications Aggregator is a service which works on top of one or more Solid Pods to provide an immediate aggregator for the clients to consume the latest streaming data stored in the Solid Pods via the Solid Notifications Protocol's [WebHookChannel2023](https://solid.github.io/notifications/webhook-channel-2023).  
 
 
 ## Architecture
 
-![Solid Stream Notifications Aggregator Architecture](./architecture.png)
+![Solid Notifications Aggregator Architecture](./architecture.png)
 
 
 ## Installation
@@ -69,4 +69,4 @@ This code is copyrighted by [Ghent University - imec](https://www.ugent.be/ea/id
 
 ## Contact
 
-For any questions, please contact [Kush](mailto:kushagrasingh.bisen@ugent.be) or create an issue in the repository [here](https://github.com/argahsuknesib/solid-stream-registry/issues).
+For any questions, please contact [Kush](mailto:kushbisen@proton.me) or create an issue in the repository. 
