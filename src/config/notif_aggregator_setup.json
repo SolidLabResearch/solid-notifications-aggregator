@@ -1,5 +1,5 @@
 {
     "__comment__": "This is the configuration file. Please change it to your needs.",
-    "notif_aggregator_http_server_url": "http://n078-22.wall1.ilabt.imec.be:8085/",
-    "notif_aggregator_ws_server_url": "ws://n078-22.wall1.ilabt.imec.be:8085/"
+    "notif_aggregator_http_server_url": "http://n079-09.wall1.ilabt.imec.be:8085/",
+    "notif_aggregator_ws_server_url": "ws://n079-09.wall1.ilabt.imec.be:8085/"
 }
