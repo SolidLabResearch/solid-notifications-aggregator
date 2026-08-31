@@ -3,14 +3,24 @@ import { SubscriptionServerNotification } from './Types';
 const N3 = require('n3');
 const parser = new N3.Parser();
 
+export interface NotificationTimingObserver {
+    inboxStart?: () => void;
+    inboxEnd?: (url: string) => void;
+    subscriptionServerStart?: () => void;
+    subscriptionServerEnd?: (url: string) => void;
+    subscriptionCreationStart?: () => void;
+    subscriptionResponse?: (ok: boolean, channel?: string) => void;
+}
+
 /**
  * Extracts the subscription server from the given resource.
  * @param {string} resource - The resource which you want to read the notifications from.
  * @returns {Promise<SubscriptionServerNotification | undefined>} - A promise which returns the subscription server or if not returns undefined.
  */
-export async function extract_subscription_server(resource: string): Promise<SubscriptionServerNotification | undefined> {
+export async function extract_subscription_server(resource: string, observer?: NotificationTimingObserver): Promise<SubscriptionServerNotification | undefined> {
     const store = new N3.Store();
     try {
+        observer?.subscriptionServerStart?.();
         const response = await axios.head(resource);
         const link_header = response.headers['link'];
         if (link_header) {
@@ -34,6 +44,7 @@ export async function extract_subscription_server(resource: string): Promise<Sub
                         channelType: subscription_type,
                         channelLocation: channelLocation
                     }
+                    observer?.subscriptionServerEnd?.(subscription_server);
                     return subscription_response;
                 }
                 else {
@@ -52,9 +63,10 @@ export async function extract_subscription_server(resource: string): Promise<Sub
  * @param {string} ldes_stream_location - The location of the LDES stream.
  * @returns {Promise<string>} - A promise which returns the inbox location.
  */
-export async function extract_ldp_inbox(ldes_stream_location: string) {
+export async function extract_ldp_inbox(ldes_stream_location: string, observer?: NotificationTimingObserver) {
     const store = new N3.Store();
     try {
+        observer?.inboxStart?.();
         const response = await axios.get(ldes_stream_location);
         if (response) {
             await parser.parse(response.data, (error: any, quad: any) => {
@@ -68,7 +80,9 @@ export async function extract_ldp_inbox(ldes_stream_location: string) {
             });
             const inbox = store.getQuads(null, 'http://www.w3.org/ns/ldp#inbox', null)[0].object.value;
             console.log(`Inbox location: ${inbox}`);
-            return ldes_stream_location + inbox
+            const inboxUrl = ldes_stream_location + inbox;
+            observer?.inboxEnd?.(inboxUrl);
+            return inboxUrl
         }
         else {
             throw new Error("The response object is empty.");

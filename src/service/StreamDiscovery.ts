@@ -5,6 +5,12 @@ const PUBLIC_TYPE_INDEX = 'http://www.w3.org/ns/solid/terms#publicTypeIndex';
 const RELATES_TO_PROPERTY = 'https://saref.etsi.org/core/relatesToProperty';
 const TREE_VIEW = 'https://w3id.org/tree#view';
 
+export interface DiscoveryTimingObserver {
+    publicTypeIndexStart?: () => void;
+    publicTypeIndexEnd?: (url: string) => void;
+    relevantStreamsEnd?: (streams: string[]) => void;
+}
+
 /**
  * Resolves LDES streams advertised by a Solid Pod's Public Type Index.
  *
@@ -15,13 +21,15 @@ const TREE_VIEW = 'https://w3id.org/tree#view';
  */
 export class StreamDiscovery {
     /** Finds the Public Type Index URL advertised by the pod profile. */
-    public async findPublicTypeIndex(podUrl: string): Promise<string> {
+    public async findPublicTypeIndex(podUrl: string, observer?: DiscoveryTimingObserver): Promise<string> {
         const profileUrl = this.profileUrl(podUrl);
+        observer?.publicTypeIndexStart?.();
         const profile = await this.getStore(profileUrl, 'profile/card');
         const typeIndex = profile.getQuads(null, PUBLIC_TYPE_INDEX, null, null)[0];
         if (!typeIndex) {
             throw new Error(`Public Type Index is missing from ${profileUrl}.`);
         }
+        observer?.publicTypeIndexEnd?.(typeIndex.object.value);
         return typeIndex.object.value;
     }
 
@@ -32,13 +40,13 @@ export class StreamDiscovery {
      * tree:view in the Type Index rather than joining it to that metric's
      * registration subject.
      */
-    public async findRelevantStreams(podUrl: string, interestMetrics: string[]): Promise<string[]> {
+    public async findRelevantStreams(podUrl: string, interestMetrics: string[], observer?: DiscoveryTimingObserver): Promise<string[]> {
         if (!Array.isArray(interestMetrics) || interestMetrics.length === 0 || interestMetrics.some(metric => typeof metric !== 'string' || metric.length === 0)) {
             throw new Error('At least one non-empty metric URI is required for stream discovery.');
         }
 
         // First pass: equivalent to Heimdall's if_exists_relevant_streams().
-        const firstTypeIndex = await this.findPublicTypeIndex(podUrl);
+        const firstTypeIndex = await this.findPublicTypeIndex(podUrl, observer);
         const firstStore = await this.getStore(firstTypeIndex, 'Public Type Index');
         const metricFound = firstStore.getQuads(null, RELATES_TO_PROPERTY, null, null)
             .some(quad => interestMetrics.includes(quad.object.value));
@@ -47,12 +55,13 @@ export class StreamDiscovery {
         }
 
         // Second pass: equivalent to Heimdall's find_relevant_streams().
-        const secondTypeIndex = await this.findPublicTypeIndex(podUrl);
+        const secondTypeIndex = await this.findPublicTypeIndex(podUrl, observer);
         const secondStore = await this.getStore(secondTypeIndex, 'Public Type Index');
         const streams = secondStore.getQuads(null, TREE_VIEW, null, null).map(quad => quad.object.value);
         if (streams.length === 0) {
             throw new Error(`No tree:view can be found in Public Type Index ${secondTypeIndex}.`);
         }
+        observer?.relevantStreamsEnd?.(streams);
         return streams;
     }
 

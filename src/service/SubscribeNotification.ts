@@ -1,4 +1,4 @@
-import { extract_ldp_inbox, extract_subscription_server } from "../utils/Util";
+import { extract_ldp_inbox, extract_subscription_server, NotificationTimingObserver } from "../utils/Util";
 import * as WebSocket from 'websocket';
 import * as AGGREGATOR_SETUP from '../config/notif_aggregator_setup.json';
 import axios from 'axios';
@@ -54,8 +54,8 @@ export class SubscribeNotification {
      * @param {string} inbox_location - The inbox location to subscribe to.
      * @returns {(Promise<boolean | undefined>)} - Returns a promise with a boolean or undefined. If the subscription is successful, it returns true. If the subscription fails, it throws an error.
      */
-    public async subscribe_inbox(inbox_location:string): Promise<boolean | undefined> {
-        const subscription_server = await extract_subscription_server(inbox_location);
+    public async subscribe_inbox(inbox_location:string, observer?: NotificationTimingObserver): Promise<boolean | undefined> {
+        const subscription_server = await extract_subscription_server(inbox_location, observer);
         if (subscription_server === undefined) {
             throw new Error("Subscription server is undefined.");
         } else {
@@ -67,11 +67,13 @@ export class SubscribeNotification {
             };
 
 
+            observer?.subscriptionCreationStart?.();
             const response_subscribe_ldes_stream = await axios.post(subscription_server.location, body, {
                 headers: {
                     'Content-Type': 'application/ld+json'
                 }
             });
+            observer?.subscriptionResponse?.(response_subscribe_ldes_stream.status === 200, response_subscribe_ldes_stream.data?.id);
             if (response_subscribe_ldes_stream.status === 200) {
                 console.log(`Subscribed to the inbox container location: ${inbox_location}`);
                 return true;
