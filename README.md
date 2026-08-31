@@ -64,9 +64,29 @@ The client will receive message such as,
 }
 ```
 
+The direct-stream interface above remains supported. To discover streams from a
+Pod's Public Type Index instead, send a `subscribeByMetric` message:
+
+```json
+{
+  "subscribeByMetric": {
+    "pod": "http://localhost:3000/pod/",
+    "metrics": [
+      "https://dahcc.idlab.ugent.be/Homelab/SensorsAndActuators/wearable.acceleration.x"
+    ]
+  }
+}
+```
+
+The aggregator retrieves `<pod>/profile/card`, follows
+`solid:publicTypeIndex`, checks `saref:relatesToProperty`, and then passes the
+discovered `tree:view` streams through the same notification-subscription path
+as `subscribe`. Successful streams emit `subscription_ready`; discovery or
+subscription failures emit `subscription_error` with an explanatory message.
+
 ## License
 This code is copyrighted by [Ghent University - imec](https://www.ugent.be/ea/idlab/en) and released under the [MIT License](./LICENSE). 
 
 ## Contact
 
-For any questions, please contact [Kush](mailto:kushbisen@proton.me) or create an issue in the repository. 
+For any questions, please contact [Kush](mailto:kushbisen@proton.me) or create an issue in the repository.

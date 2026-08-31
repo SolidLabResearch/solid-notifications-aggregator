@@ -1,5 +1,6 @@
 import * as WebSocket from 'websocket';
 import { SubscribeNotification } from '../service/SubscribeNotification';
+import { StreamDiscovery } from '../service/StreamDiscovery';
 import { extract_ldp_inbox } from '../utils/Util';
 
 /**
@@ -10,6 +11,7 @@ export class WebSocketServerHandler {
     public websocket_server: any;
     public websocket_connections: Map<string, WebSocket[]>;
     public subscribe_notification: SubscribeNotification;
+    public stream_discovery: StreamDiscovery;
     /** One in-flight/completed upstream Solid subscription per exact stream URL. */
     private readonly stream_subscriptions: Map<string, Promise<void>>;
 
@@ -21,6 +23,7 @@ export class WebSocketServerHandler {
         this.websocket_server = websocket_server;
         this.websocket_connections = new Map<string, WebSocket[]>();
         this.subscribe_notification = new SubscribeNotification();
+        this.stream_discovery = new StreamDiscovery();
         this.stream_subscriptions = new Map<string, Promise<void>>();
     }
 
@@ -53,6 +56,23 @@ export class WebSocketServerHandler {
                             } catch (error) {
                                 console.error(`Failed to establish subscription for ${stream}: ${(error as Error).message}`);
                             }
+                        }
+                    }
+                    else if (Object.keys(ws_message).includes('subscribeByMetric')) {
+                        const request = ws_message.subscribeByMetric;
+                        try {
+                            if (!request || typeof request.pod !== 'string' || !Array.isArray(request.metrics)) {
+                                throw new Error('subscribeByMetric requires a pod URL and a metrics array.');
+                            }
+                            const streams = await this.stream_discovery.findRelevantStreams(request.pod, request.metrics);
+                            for (const stream of streams) {
+                                await this.set_connections(stream, connection);
+                                connection.sendUTF(JSON.stringify({ type: 'subscription_ready', stream }));
+                            }
+                        } catch (error) {
+                            const errorMessage = (error as Error).message;
+                            console.error(`Failed to establish discovery-based subscription: ${errorMessage}`);
+                            connection.sendUTF(JSON.stringify({ type: 'subscription_error', pod: request && request.pod, error: errorMessage }));
                         }
                     }
                     else if (Object.keys(ws_message).includes('event')) {
