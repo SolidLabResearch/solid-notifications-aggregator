@@ -1,5 +1,6 @@
 import * as WebSocket from 'websocket';
 import { SubscribeNotification } from '../service/SubscribeNotification';
+import { StreamDiscovery } from '../service/StreamDiscovery';
 import { extract_ldp_inbox } from '../utils/Util';
 
 /**
@@ -10,6 +11,9 @@ export class WebSocketServerHandler {
     public websocket_server: any;
     public websocket_connections: Map<string, WebSocket[]>;
     public subscribe_notification: SubscribeNotification;
+    public stream_discovery: StreamDiscovery;
+    /** One in-flight/completed upstream Solid subscription per exact stream URL. */
+    private readonly stream_subscriptions: Map<string, Promise<void>>;
 
     /**
      * Creates an instance of WebSocketServerHandler.
@@ -19,6 +23,8 @@ export class WebSocketServerHandler {
         this.websocket_server = websocket_server;
         this.websocket_connections = new Map<string, WebSocket[]>();
         this.subscribe_notification = new SubscribeNotification();
+        this.stream_discovery = new StreamDiscovery();
+        this.stream_subscriptions = new Map<string, Promise<void>>();
     }
 
     /**
@@ -41,7 +47,32 @@ export class WebSocketServerHandler {
                         const stream_to_subscribe = ws_message.subscribe;
                         for (const stream of stream_to_subscribe) {
                             console.log(`Subscribed to the stream: ${stream}`);
-                            this.set_connections(stream, connection);
+                            try {
+                                await this.set_connections(stream, connection);
+                                // This is deliberately after the successful Solid
+                                // subscription and connection association, not after
+                                // receipt of the client WebSocket message.
+                                connection.sendUTF(JSON.stringify({ type: 'subscription_ready', stream }));
+                            } catch (error) {
+                                console.error(`Failed to establish subscription for ${stream}: ${(error as Error).message}`);
+                            }
+                        }
+                    }
+                    else if (Object.keys(ws_message).includes('subscribeByMetric')) {
+                        const request = ws_message.subscribeByMetric;
+                        try {
+                            if (!request || typeof request.pod !== 'string' || !Array.isArray(request.metrics)) {
+                                throw new Error('subscribeByMetric requires a pod URL and a metrics array.');
+                            }
+                            const streams = await this.stream_discovery.findRelevantStreams(request.pod, request.metrics);
+                            for (const stream of streams) {
+                                await this.set_connections(stream, connection);
+                                connection.sendUTF(JSON.stringify({ type: 'subscription_ready', stream }));
+                            }
+                        } catch (error) {
+                            const errorMessage = (error as Error).message;
+                            console.error(`Failed to establish discovery-based subscription: ${errorMessage}`);
+                            connection.sendUTF(JSON.stringify({ type: 'subscription_error', pod: request && request.pod, error: errorMessage }));
                         }
                     }
                     else if (Object.keys(ws_message).includes('event')) {
@@ -77,19 +108,28 @@ export class WebSocketServerHandler {
      * @param {string} subscribed_stream - The subscribed stream.
      * @param {WebSocket} connection - The WebSocket connection.
      */
-    public async set_connections(subscribed_stream: string, connection: WebSocket){
-        if (!this.websocket_connections.has(subscribed_stream)) {   
-            const stream_inbox = await extract_ldp_inbox(subscribed_stream) as string;            
-            this.subscribe_notification.subscribe_inbox(stream_inbox);                     
-            this.websocket_connections.set(subscribed_stream, [connection]);
-        }
-        else {
-            const connections = this.websocket_connections.get(subscribed_stream);
-            if (connections !== undefined) {
-                connections.push(connection);
-                this.websocket_connections.set(subscribed_stream, connections);
-            }
+    public async set_connections(subscribed_stream: string, connection: WebSocket): Promise<void> {
+        const connections = this.websocket_connections.get(subscribed_stream) || [];
+        if (!connections.includes(connection)) connections.push(connection);
+        this.websocket_connections.set(subscribed_stream, connections);
 
+        let subscription = this.stream_subscriptions.get(subscribed_stream);
+        if (!subscription) {
+            subscription = (async () => {
+                const stream_inbox = await extract_ldp_inbox(subscribed_stream) as string;
+                if (!stream_inbox) throw new Error(`No inbox found for ${subscribed_stream}.`);
+                const established = await this.subscribe_notification.subscribe_inbox(stream_inbox);
+                if (established !== true) throw new Error(`Subscription was not established for ${subscribed_stream}.`);
+            })();
+            this.stream_subscriptions.set(subscribed_stream, subscription);
+        }
+        try {
+            await subscription;
+        } catch (error) {
+            const current = this.websocket_connections.get(subscribed_stream) || [];
+            this.websocket_connections.set(subscribed_stream, current.filter(item => item !== connection));
+            this.stream_subscriptions.delete(subscribed_stream);
+            throw error;
         }
     }
 }
